@@ -1,27 +1,27 @@
 /* lucy_lib.c - Core functionality for the Lucy annotation processor library
  *
- * This file contains the primary logic for parsing, processing, and generating
- * annotated C code. It’s used by both the standalone Lucy CLI tool and the test
- * runner to handle annotation extraction, extension resolution, conditional
- * compilation, and metadata generation. All public API functions are declared
- * in lucy_api.h, while internal/test functions and state are in lucy.h.
+ * This file manages the high-level processing of annotated C code, relying on
+ * parsing.c for token matching and string extraction. It’s used by both the
+ * standalone Lucy CLI tool and the test runner to handle annotation processing,
+ * extension resolution, conditional compilation, and metadata generation.
  *
  * Key Components:
- * - Annotation Parsing: Extracts annotation names and arguments from comments.
- * - Extension Handling: Maps custom annotations (e.g., @Test) to base ones (e.g., @When).
- * - File Processing: Transforms input .c files with #ifdef directives based on conditions.
- * - Annotation Tracking: Generates header/source files with metadata for annotated blocks.
+ * - File Processing: Transforms input .c files with #ifdef directives.
+ * - Annotation Tracking: Generates header/source files with metadata.
+ * - State Management: Initializes and cleans up internal state.
  *
  * Dependencies:
  * - lucy_api.h: Public API (process_file, generate_annotations_*, init, cleanup) and defines.
  * - lucy.h: Internal structs (Annotation, Extension) and test-exposed functions.
+ * - parsing.h: Parsing utilities (is_annotation, extract_annotation_name, etc.).
  * - Standard C libraries: stdio.h, stdlib.h, string.h for file I/O and string ops.
  */
 
  #include <stdio.h>
  #include <stdlib.h>
  #include <string.h>
- #include "../include/lucy_api.h"  // Includes MAX_LINE_LENGTH, MAX_ARGS, MAX_BUFFER_SIZE
+ #include "../include/lucy_api.h"
+ #include "../include/parsing.h"
  
  /* Static global state for annotation tracking */
  static struct Annotation annotations[MAX_ANNOTATIONS];
@@ -31,109 +31,6 @@
  Extension extensions[MAX_ANNOTATIONS];
  int extension_count = 0;
  
- /* Checks if a line starts with an annotation comment (e.g., "// @") */
- int is_annotation(const char *line) {
-     return strncmp(line, "// @", 4) == 0;
- }
- 
- /* Checks if a line defines an annotation extension (e.g., "// #annotation") */
- int is_extension_def(const char *line) {
-     return strncmp(line, "// #annotation ", 15) == 0;
- }
- 
- /* Extracts the name and arguments from an annotation comment */
- void extract_annotation_name(const char *line, char *name, char *arg) {
-     const char *start = line + 4;  // Skip "// @"
-     const char *paren = strchr(line, '(');
-     if (paren) {
-         int name_len = paren - start;
-         if (name_len >= MAX_BUFFER_SIZE) name_len = MAX_BUFFER_SIZE - 1;
-         strncpy(name, start, name_len);
-         name[name_len] = 0;
- 
-         const char *arg_start = paren + 1;
-         const char *arg_end = strchr(paren, ')');
-         if (arg_end) {
-             int arg_len = arg_end - arg_start;
-             if (arg_len >= MAX_BUFFER_SIZE) arg_len = MAX_BUFFER_SIZE - 1;
-             strncpy(arg, arg_start, arg_len);
-             arg[arg_len] = 0;
-         } else {
-             int arg_len = strlen(arg_start);
-             if (arg_len >= MAX_BUFFER_SIZE) arg_len = MAX_BUFFER_SIZE - 1;
-             strncpy(arg, arg_start, arg_len);
-             arg[arg_len] = 0;
-         }
-     } else {
-         strncpy(name, start, MAX_BUFFER_SIZE - 1);
-         name[MAX_BUFFER_SIZE - 1] = 0;
-         name[strcspn(name, " \t\n")] = 0;
-         arg[0] = 0;
-     }
- }
- 
- /* Extracts components from an extension definition */
- void extract_extension(const char *line, char *name, char *args, char *base, char *base_arg) {
-     const char *start = line + 15;
-     const char *at = strchr(start, '@');
-     if (!at) return;
- 
-     const char *paren = strchr(at, '(');
-     if (!paren) return;
- 
-     int name_len = paren - at - 1;
-     if (name_len >= MAX_BUFFER_SIZE) name_len = MAX_BUFFER_SIZE - 1;
-     strncpy(name, at + 1, name_len);
-     name[name_len] = 0;
- 
-     const char *arg_start = paren + 1;
-     const char *arg_end = strchr(paren, ')');
-     if (!arg_end) return;
-     int arg_len = arg_end - arg_start;
-     if (arg_len >= MAX_BUFFER_SIZE) arg_len = MAX_BUFFER_SIZE - 1;
-     strncpy(args, arg_start, arg_len);
-     args[arg_len] = 0;
- 
-     const char *colon = strstr(line, " : @");
-     if (!colon) return;
-     const char *base_start = colon + 4;
-     const char *base_paren = strchr(base_start, '(');
-     if (!base_paren) return;
- 
-     int base_len = base_paren - base_start;
-     if (base_len >= MAX_BUFFER_SIZE) base_len = MAX_BUFFER_SIZE - 1;
-     strncpy(base, base_start, base_len);
-     base[base_len] = 0;
- 
-     const char *base_arg_start = base_paren + 1;
-     const char *base_arg_end = strchr(base_paren, ')');
-     if (!base_arg_end) return;
-     int base_arg_len = base_arg_end - base_arg_start;
-     if (base_arg_len >= MAX_BUFFER_SIZE) base_arg_len = MAX_BUFFER_SIZE - 1;
-     strncpy(base_arg, base_arg_start, base_arg_len);
-     base_arg[base_arg_len] = 0;
- }
- 
- /* Checks if a line is a function definition */
- static int is_function_definition(const char *line) {
-     return strchr(line, '(') && strchr(line, ')') && strchr(line, '{');
- }
- 
- /* Extracts the function name from a definition line */
- static void extract_function_name(const char *line, char *name) {
-     const char *start = strchr(line, ' ') + 1;
-     const char *end = strchr(line, '(');
-     int len = end - start;
-     if (len >= MAX_BUFFER_SIZE) len = MAX_BUFFER_SIZE - 1;
-     strncpy(name, start, len);
-     name[len] = 0;
- }
- 
- /* Checks if a line ends a function block */
- static int is_function_end(const char *line) {
-     return strchr(line, '}') != NULL;
- }
- 
  /* Looks up the base annotation for an extension */
  const char *get_extension_base(const char *name) {
      for (int i = 0; i < extension_count; i++) {
@@ -142,37 +39,6 @@
          }
      }
      return NULL;
- }
- 
- /* Splits a comma-separated argument string into an array */
- static void split_args(const char *arg_str, const char **args, int *arg_count) {
-     char temp[MAX_BUFFER_SIZE];
-     strncpy(temp, arg_str, MAX_BUFFER_SIZE - 1);
-     temp[MAX_BUFFER_SIZE - 1] = 0;
-     *arg_count = 0;
- 
-     char *token = strtok(temp, ",");
-     while (token && *arg_count < MAX_ARGS) {
-         while (*token == ' ') token++;
-         int len = strlen(token);
-         while (len > 0 && token[len - 1] == ' ') len--;
-         if (len > 1 && token[0] == '"' && token[len - 1] == '"') {
-             token++;
-             len -= 2;
-         }
-         if (len >= MAX_BUFFER_SIZE) len = MAX_BUFFER_SIZE - 1;
- 
-         char *arg = malloc(len + 1);
-         if (!arg) {
-             perror("Memory allocation failed in split_args");
-             return;
-         }
-         strncpy(arg, token, len);
-         arg[len] = 0;
-         args[*arg_count] = arg;
-         (*arg_count)++;
-         token = strtok(NULL, ",");
-     }
  }
  
  /* Loads extension definitions from annotations.h */

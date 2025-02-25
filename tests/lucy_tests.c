@@ -1,29 +1,18 @@
-/* Unit tests for lucy's internal functionality
- * These tests verify the core parsing, extension handling, file processing,
- * and annotation generation logic in lucy_lib.c. They cover both typical use
- * cases and edge conditions to ensure robustness.
- */
+/* Unit tests for lucy's internal functionality */
 #include "../include/annotations.h"
 #include "../include/test_utils.h"
-#include "../include/lucy_api.h"  // For lucy_init() and MAX_BUFFER_SIZE
+#include "../include/lucy_api.h"
+#include "../include/parsing.h"
 #include <string.h>
 
 /* Function prototypes from lucy.h for testing */
-void extract_annotation_name(const char *line, char *name, char *arg);
-void extract_extension(const char *line, char *name, char *args, char *base, char *base_arg);
 const char *get_extension_base(const char *name);
 void load_extensions(const char *base_annotations_path);
 
 /* Dummy functions to test translation */
-void dummy_func(void) {
-    /* Empty function for annotation testing */
-}
+void dummy_func(void) {}
+void dummy_another(void) {}
 
-void dummy_another(void) {
-    /* Another dummy for multi-function tests */
-}
-
-/* Parsing Tests */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcomment"
 // @Test(TARGET_TEST, "Extract simple annotation name")
@@ -32,15 +21,9 @@ void test_extract_simple_annotation() {
     lucy_init();
     char name[MAX_BUFFER_SIZE] = {0};
     char arg[MAX_BUFFER_SIZE] = {0};
-    printf("DEBUG: Starting test_extract_simple_annotation\n");
-    fflush(stdout);
     extract_annotation_name("// @When", name, arg);
-    printf("DEBUG: After extract, name='%s', arg='%s'\n", name, arg);
-    fflush(stdout);
     assertStringEquals("When", name, "Expected name to be 'When'");
     assertStringEquals("", arg, "Expected no arguments");
-    printf("DEBUG: Finished test_extract_simple_annotation\n");
-    fflush(stdout);
 }
 
 // @Test(TARGET_TEST, "Extract annotation with arguments")
@@ -73,7 +56,6 @@ void test_extract_annotation_with_whitespace() {
     assertStringEquals("", arg, "Expected no arguments");
 }
 
-/* Extension Tests */
 // @Test(TARGET_TEST, "Extract extension definition")
 void test_extract_extension() {
     lucy_init();
@@ -127,7 +109,6 @@ void test_get_extension_base_empty() {
     assertEquals(NULL, base, "Expected NULL with no extensions");
 }
 
-/* Translation Tests (indirect via output verification) */
 // @Test(TARGET_TEST, "Process file with @When - manual check")
 void test_process_when() {
     lucy_init();
@@ -140,7 +121,6 @@ void test_multiple_annotations() {
     assertTrue(1, "Manual check: Only last annotation should apply (limitation)");
 }
 
-/* Annotation Tracking Tests */
 // @Test(TARGET_TEST, "Generate annotations header - manual check")
 void test_generate_annotations_header() {
     lucy_init();
