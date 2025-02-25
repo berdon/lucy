@@ -1,0 +1,5 @@
+./.vscode
+./build
+liblucy.so
+lucy
+test_runner
