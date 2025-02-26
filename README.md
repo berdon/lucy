@@ -4,6 +4,16 @@
 
 Lucy is a lightweight C annotation processor and testing framework designed to simplify code generation and unit testing. It includes `lucy`, a command-line tool for processing annotations in C source files, and `lucy-test`, a library for annotation-based unit testing. Lucy aims to provide a minimal, dependency-free solution for developers seeking to enhance their C projects with automated processing and testing capabilities.
 
+## AI Generation
+
+This project has been built over a handful of hours using Grok. The _only_ hand coding/debugging was "helping" the LLM with either compilation and runtime errors.
+
+### Thoughts
+
+The building process was aking to holding a junior/middling developers hand. At times working through issues felt like going round and round in circles until I dug in, found the problem, and either pointed it out or the _actual solution_ to Grok. This isn't something a non-developer would be able to do. This might not even be something most developers can do - as you need to be able to jump into a 100% new codebase with zero context and root-cause issues.
+
+It's vitally important to keep the amount of context the LLM needs to a minimum. Give singular tasks with guardrails and have ways to verify the output. The whole point of the lucy project stemmed from wanting to have an easy way for the LLM to add more unit tests to break apart code into smaller chunks.
+
 ## Features
 
 - **Annotation Processing**: Parse custom annotations in C comments (e.g., `// @Annotation`) to generate code or metadata.
