@@ -9,6 +9,8 @@
 #define MAX_ARGS 8
 /* Maximum size of name and arg buffers; matches MAX_LINE_LENGTH for safety */
 #define MAX_BUFFER_SIZE 1024
+/* Maximum number of annotations that can be tracked */
+#define MAX_ANNOTATIONS 1000
 
 /* Process a single input file and write to an output file.
  * input_path: Path to the input .c file.
@@ -39,5 +41,11 @@ void lucy_init(void);
  * Cleans up memory allocated during processing.
  */
 void lucy_cleanup(void);
+
+/* Find annotated blocks by name (e.g., "Test") in the global __ANNOTATIONS array.
+ * name: The annotation name to search for.
+ * Returns: Pointer to an array of matching Annotation structs.
+ */
+struct Annotation *find_annotated_blocks(const char *name);
 
 #endif // LUCY_API_H

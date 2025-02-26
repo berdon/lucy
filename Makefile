@@ -14,30 +14,37 @@ BIN_DIR = ./
 LUCY_TARGET = $(BIN_DIR)/lucy
 LIB_TARGET = $(BIN_DIR)/liblucy.so
 TEST_TARGET = $(BIN_DIR)/test_runner
+LUCY_TEST_TARGET = $(BIN_DIR)/liblucy-test.so
 
 # Source and object files
 LUCY_SRC = $(SRC_DIR)/lucy.c
 LUCY_LIB_SRC = $(SRC_DIR)/lucy_lib.c
 PARSING_SRC = $(SRC_DIR)/parsing.c
+LUCY_TEST_MAIN_SRC = $(SRC_DIR)/lucy_test_main.c
 LUCY_OBJ = $(BUILD_DIR)/lucy.o
 LUCY_LIB_OBJ = $(BUILD_DIR)/lucy_lib.o
 PARSING_OBJ = $(BUILD_DIR)/parsing.o
+LUCY_TEST_MAIN_OBJ = $(BUILD_DIR)/lucy_test_main.o
 LIB_OBJ = $(BUILD_DIR)/lucy_shared.o
 
-TEST_SRCS = $(TEST_DIR)/simple.c $(TEST_DIR)/complex.c $(TEST_DIR)/lucy_tests.c $(TEST_DIR)/main.c
-TEST_OBJS = $(BUILD_DIR)/simple_processed.o $(BUILD_DIR)/complex_processed.o $(BUILD_DIR)/lucy_tests_processed.o $(BUILD_DIR)/main.o $(BUILD_DIR)/annotations.o $(LUCY_LIB_OBJ) $(PARSING_OBJ)
+TEST_SRCS = $(TEST_DIR)/simple.c $(TEST_DIR)/complex.c $(TEST_DIR)/lucy_tests.c
+TEST_OBJS = $(BUILD_DIR)/simple_processed.o $(BUILD_DIR)/complex_processed.o $(BUILD_DIR)/lucy_tests_processed.o $(BUILD_DIR)/annotations.o
 TEST_PREPROCESSED = $(BUILD_DIR)/simple_processed.c $(BUILD_DIR)/complex_processed.c $(BUILD_DIR)/lucy_tests_processed.c
 
 # Default target
-all: $(LUCY_TARGET) $(LIB_TARGET) test
+all: $(LUCY_TARGET) $(LIB_TARGET) $(LUCY_TEST_TARGET) test
 
 # Build lucy binary
 $(LUCY_TARGET): $(LUCY_OBJ) $(LUCY_LIB_OBJ) $(PARSING_OBJ)
 	$(CC) $(LUCY_OBJ) $(LUCY_LIB_OBJ) $(PARSING_OBJ) -o $@
 
 # Build lucy shared library
-$(LIB_TARGET): $(LIB_OBJ) $(PARSING_OBJ)  # Added PARSING_OBJ
-	$(CC) $(LDFLAGS) -o $@ $(LIB_OBJ) $(PARSING_OBJ)  # Link both objects
+$(LIB_TARGET): $(LIB_OBJ) $(PARSING_OBJ)
+	$(CC) $(LDFLAGS) -o $@ $(LIB_OBJ) $(PARSING_OBJ)
+
+# Build lucy-test shared library (without annotations.o)
+$(LUCY_TEST_TARGET): $(LUCY_LIB_OBJ) $(PARSING_OBJ) $(LUCY_TEST_MAIN_OBJ)
+	$(CC) $(LDFLAGS) -o $@ $(LUCY_LIB_OBJ) $(PARSING_OBJ) $(LUCY_TEST_MAIN_OBJ)
 
 # Compile lucy source for binary
 $(LUCY_OBJ): $(LUCY_SRC) | $(BUILD_DIR)
@@ -49,6 +56,10 @@ $(LUCY_LIB_OBJ): $(LUCY_LIB_SRC) | $(BUILD_DIR)
 
 # Compile parsing source
 $(PARSING_OBJ): $(PARSING_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile lucy-test main source
+$(LUCY_TEST_MAIN_OBJ): $(LUCY_TEST_MAIN_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile lucy source for shared library
@@ -69,12 +80,9 @@ $(BUILD_DIR)/%_processed.o: $(BUILD_DIR)/%_processed.c $(BUILD_DIR)/annotations.
 $(BUILD_DIR)/annotations.o: $(BUILD_DIR)/annotations.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/main.o: $(TEST_DIR)/main.c $(BUILD_DIR)/annotations.h | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# Link test runner
-$(BIN_DIR)/$(TEST_TARGET): $(TEST_OBJS)
-	$(CC) $(TEST_OBJS) -o $@
+# Link test runner with liblucy-test.so and test objects
+$(BIN_DIR)/$(TEST_TARGET): $(TEST_OBJS) $(LUCY_TEST_TARGET)
+	$(CC) $(TEST_OBJS) -L$(BIN_DIR) -llucy-test -o $@
 
 # Create build directory
 $(BUILD_DIR):
@@ -86,7 +94,7 @@ test: $(TEST_TARGET)
 
 # Clean up
 clean:
-	rm -rf $(BUILD_DIR) $(LUCY_TARGET) $(LIB_TARGET) $(TEST_TARGET)
+	rm -rf $(BUILD_DIR) $(LUCY_TARGET) $(LIB_TARGET) $(LUCY_TEST_TARGET) $(TEST_TARGET)
 
 # Phony targets
 .PHONY: all test clean

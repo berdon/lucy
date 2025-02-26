@@ -1,29 +1,21 @@
-#include "../include/annotations.h"
-#include "../include/test_utils.h"
+/* More complex unit tests for lucy annotation processing */
+#include "../include/lucy_test.h"
 #include <string.h>
 
-// @Test(TARGET_TEST, "Test string inequality")
+// @Test("Test string inequality")
 void test_string_inequality() {
-    const char *expected = "hello";
-    const char *actual = "world";
-    assertNotEquals(expected, actual, "Strings should differ");
+    assertStringNotEquals("hello", "world", "Strings should not match");
 }
 
-// @Test(TARGET_TEST, "Test false condition")
+// @Test("Test false condition")
 void test_false_condition() {
-    assertFalse(0, "Zero should be false");
-    assertTrue(1, "One should be true");
+    assertFalse(1 == 2, "One should not equal two");
 }
 
-// @Test(TARGET_TEST, "Test pointer comparison")
-void test_pointers() {
+// @Test("Test pointer comparison")
+void test_pointer_comparison() {
     int x = 42;
-    int *expected = &x;
-    int *actual = &x;
-    assertEquals(expected, actual, "Pointers should match");
-}
-
-// @Test(DISABLED_TEST, "Another disabled test")
-void test_disabled_complex() {
-    assertEquals(1, 2, "This should not run either");
+    int *p = &x;
+    int *q = &x;
+    assertEquals(p, q, "Pointers to same address should match");
 }
