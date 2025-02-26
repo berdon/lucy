@@ -1,15 +1,15 @@
-# Lucy: Precompiled Annotation Processor (AI Generated)
+# Lucy: Annotation Processor and Testing Framework
 
-Lucy is a lightweight C preprocessor that adds annotation support to C code, enabling features like conditional compilation and metadata tracking without modifying the core language syntax. It processes `.c` files with annotations (e.g., `// @Annotation`), generates transformed outputs, and aggregates annotation tracking into separate files for linking. It can be used as a standalone binary or a shared library.
+## Overview
 
-~99% of the code in this repository has been generated via AI.
+Lucy is a lightweight C annotation processor and testing framework designed to simplify code generation and unit testing. It includes `lucy`, a command-line tool for processing annotations in C source files, and `lucy-test`, a library for annotation-based unit testing. Lucy aims to provide a minimal, dependency-free solution for developers seeking to enhance their C projects with automated processing and testing capabilities.
 
 ## Features
-- **Annotations**: Supports user-defined annotations (e.g., `// @Test`) with inheritance (e.g., extending `@When`).
-- **Conditional Compilation**: Wraps annotated blocks in `#ifdef` directives based on conditions.
-- **Tracking**: Generates an `annotations.h` and `annotations.c` with metadata for all annotated functions.
-- **Library Support**: Provides `liblucy.so` for programmatic use in other applications.
-- **Simple Integration**: Works with standard C build systems via Makefile.
+
+- **Annotation Processing**: Parse custom annotations in C comments (e.g., `// @Annotation`) to generate code or metadata.
+- **Unit Testing**: Use `lucy-test` to write and run tests with simple `// @Test` annotations.
+- **Extensible**: Define custom annotation extensions for project-specific needs.
+- **Sample Project**: Includes `toyvm`, a minimal interpreter demonstrating `lucy-test` usage.
 
 ## Directory Structure
 ```
@@ -29,210 +29,161 @@ Lucy is a lightweight C preprocessor that adds annotation support to C code, ena
 └── Makefile               # Build script
 ```
 
-## Usage (CLI)
-Lucy can be used as a command-line tool integrated into a build pipeline via a Makefile.
+## Installation
 
-### 1. Define Annotations
-Edit `include/annotations.h` to define your annotations:
+### Prerequisites
+- GCC or a compatible C compiler (e.g., Clang).
+- Standard C library.
 
-```c
-#ifndef ANNOTATIONS_H
-#define ANNOTATIONS_H
+### Building
+From the root `lucy/` directory:
 
-#include "lucy.h"
-
-// Define custom annotations
-// #annotation @Test(condition, description) : @When(condition)
-
-#endif // ANNOTATIONS_H
+```bash
+make clean && make
 ```
 
-### 2. Write Annotated Code
+This builds:
+- `lucy`: The annotation processor binary.
+- `liblucy-test.so`: The shared library for unit testing.
 
-Add annotations to your .c files (e.g., tests/simple.c):
+## Using lucy-test in Your Projects
+
+`lucy-test` provides a simple way to add unit tests to C projects using annotations. Here’s how to integrate it:
+
+### Setup
+1. **Include the Header**: Add `#include "lucy_test.h"` to your test file, assuming it’s in your include path.
+2. **Write Tests**: Use `// @Test` annotations above test functions. Optionally, use `// @Disable` to skip tests.
 
 ```c
-#include "../include/annotations.h"
-#include "../include/test_utils.h"
-#include <string.h>
+#include "lucy_test.h"
 
-// @Test(TARGET_TEST, "Test string equality")
-void test_string_equality() {
-    const char *expected = "hello";
-    const char *actual = "hello";
-    assertEquals(expected, actual, "Strings should match");
+// @Test("Example test")
+void test_example() {
+    assertEquals(1 + 1, 2, "1 + 1 should equal 2");
+}
+
+// @Disable("Not implemented yet")
+// @Test("Disabled test")
+void test_disabled() {
+    assertTrue(0, "This should not run");
 }
 ```
 
-### 3. Build with Makefile
-
-The provided Makefile processes files with lucy and builds a test runner:
+3. **Process with lucy**: Use the `lucy` tool to preprocess your test file and generate annotation metadata:
 
 ```bash
-make
+lucy include/annotations.h build/annotations.h build/annotations.c tests.c:build/tests_processed.c
 ```
 
-#### Steps:
-
-- Compiles `lucy` from `src/lucy.c`.
-- Runs `lucy` to process `tests/*.c` into `build/*_processed.c` and generate `build/annotations.h` and `build/annotations.c`.
-- Compiles processed files and links into `test_runner`.
-
-### 4. Run Tests
-
-Execute the test runner:
+4. **Compile and Link**:
+   - Compile your source and test files with `-DTARGET_TEST=1` to enable test mode.
+   - Link against `liblucy-test.so` to include the test runner.
 
 ```bash
-./test_runner
+gcc -Wall -O2 -DTARGET_TEST=1 -Iinclude -c src/mylib.c -o build/mylib.o
+gcc -Wall -O2 -DTARGET_TEST=1 -Iinclude -c build/tests_processed.c -o build/tests_processed.o
+gcc -Wall -O2 -DTARGET_TEST=1 -Iinclude -c build/annotations.c -o build/annotations.o
+gcc build/tests_processed.o build/mylib.o build/annotations.o -L. -llucy-test -o test_runner
 ```
 
-#### Output:
+5. **Run Tests**:
+   ```bash
+   ./test_runner
+   ```
+   Output example:
+   ```
+   Running tests...
+   Running: Example test ✔
 
-Shows test results with green checkmarks (✔) for passes and red X’s (✘) for failures (via assertions).
+   Disabled tests:
+   Disabled: Disabled test (Not implemented yet)
 
-### 5. Customize
+   Test Summary: 1/1 passed (1 disabled)
+   ✔ All enabled tests passed!
+   ```
 
-- Conditions: Define macros like TARGET_TEST in CFLAGS (e.g., -DTARGET_TEST=1) to enable/disable tests.
-- New Annotations: Add to include/annotations.h and use in your code.
-- Clean: Run make clean to remove generated files.
+### Makefile Integration
+Add rules to your Makefile to automate the process:
 
-## Usage (Shared Library)
+```make
+CFLAGS = -Wall -O2 -Iinclude
+TEST_CFLAGS = $(CFLAGS) -DTARGET_TEST=1
+LDFLAGS = -L. -llucy-test
 
-Lucy can also be used as a shared library (liblucy.so) for programmatic annotation processing.
+test: test_runner
+    ./test_runner
 
-### 1. Include Headers
+test_runner: build/tests_processed.o build/mylib.o build/annotations.o
+    $(CC) $^ $(LDFLAGS) -o $@
 
-In your program:
+build/annotations.h build/annotations.c build/tests_processed.c: tests.c
+    ./lucy include/annotations.h build/annotations.h build/annotations.c tests.c:build/tests_processed.c
 
-```c
-#include "lucy_api.h"
+build/tests_processed.o: build/tests_processed.c
+    $(CC) $(TEST_CFLAGS) -c $< -o $@
+
+build/mylib.o: src/mylib.c
+    $(CC) $(CFLAGS) -c $< -o $@
+
+build/annotations.o: build/annotations.c
+    $(CC) $(TEST_CFLAGS) -c $< -o $@
 ```
 
-### 2. Process Files
+### Notes
+- Ensure `liblucy-test.so` is in the link path (e.g., `-L.` or adjust `LD_LIBRARY_PATH` on macOS).
+- Use `lucy-test.h` assertions like `assertEquals`, `assertTrue`, and `assertStringEquals` for test conditions.
 
-Use the API:
+## Sample Project: ToyVM
 
-```c
-int main() {
-    lucy_init();
-    lucy_process_file("src/input.c", "build/input_processed.c");
-    lucy_generate_annotations_header("include/annotations.h", "build/annotations.h");
-    lucy_generate_annotations_source("build/annotations.c");
-    lucy_cleanup();
-    return 0;
-}
-```
+The `samples/toyvm/` directory contains a sample project, `toyvm`, demonstrating `lucy-test` in action. ToyVM is a minimal interpreter for the "Toy" language, supporting:
 
-### 3. Compile and Link
+- **Variables**: `x = 5` (single-letter variables `a-z`).
+- **Arithmetic**: `+`, `-`, `*`, `/` (e.g., `x + 3`, `z = x + y`).
+- **Print**: `print(x)` (outputs in grey text).
+- **Debug Mode**: Run with `--debug` or `-d` for detailed execution logs.
 
-Compile your program with liblucy.so:
-
+### Building and Running ToyVM
 ```bash
-gcc -I./include -c my_program.c -o my_program.o
-gcc my_program.o -L./ -llucy -o my_program
-LD_LIBRARY_PATH=./ ./my_program
+cd samples/toyvm
+make clean && make
+./toyvm
 ```
 
-    Notes: Ensure liblucy.so is in the runtime library path (LD_LIBRARY_PATH).
-
-## Example Makefile
-
-Here’s a standalone Makefile example for using lucy with custom source files:
-
-```makefile
-# Compiler and flags
-CC = gcc
-CFLAGS = -Wall -Wextra -O2 -I./include
-LDFLAGS = -shared
-
-# Directories
-SRC_DIR = ./src
-INCLUDE_DIR = ./include
-BUILD_DIR = ./build
-BIN_DIR = ./
-
-# Targets
-LUCY = $(BIN_DIR)/lucy
-LIB = $(BIN_DIR)/liblucy.so
-PROGRAM = $(BIN_DIR)/my_program
-
-# Sources and outputs
-LUCY_SRC = $(SRC_DIR)/lucy.c
-SOURCES = main.c util.c
-PREPROCESSED = $(BUILD_DIR)/main_processed.c $(BUILD_DIR)/util_processed.c
-OBJECTS = $(PREPROCESSED:.c=.o) $(BUILD_DIR)/annotations.o
-
-# Default target
-all: $(PROGRAM)
-
-# Build lucy binary
-$(LUCY): $(LUCY_SRC)
-	$(CC) $(CFLAGS) -o $@ $<
-
-# Build lucy shared library
-$(LIB): $(LUCY_SRC)
-	$(CC) $(CFLAGS) -fPIC -c $< -o $(BUILD_DIR)/lucy_shared.o
-	$(CC) $(LDFLAGS) -o $@ $(BUILD_DIR)/lucy_shared.o
-
-# Process sources and generate annotations
-$(BUILD_DIR)/annotations.h $(BUILD_DIR)/annotations.c $(PREPROCESSED): $(SOURCES) $(INCLUDE_DIR)/annotations.h | $(LUCY) $(BUILD_DIR)
-	$(LUCY) $(INCLUDE_DIR)/annotations.h $(BUILD_DIR)/annotations.h $(BUILD_DIR)/annotations.c $(SRC_DIR)/main.c:$(BUILD_DIR)/main_processed.c $(SRC_DIR)/util.c:$(BUILD_DIR)/util_processed.c
-
-# Compile objects
-$(BUILD_DIR)/%_processed.o: $(BUILD_DIR)/%_processed.c $(BUILD_DIR)/annotations.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/annotations.o: $(BUILD_DIR)/annotations.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# Link program
-$(PROGRAM): $(OBJECTS)
-	$(CC) $(OBJECTS) -o $@
-
-# Create build directory
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
-
-# Clean up
-clean:
-	rm -rf $(BUILD_DIR) $(LUCY) $(LIB) $(PROGRAM)
-
-.PHONY: all clean
+Example session:
+```toy
+ToyVM Interactive Shell (Ctrl+D or Ctrl+C to exit)
+x = 5
+y = 6
+z = x + y
+print(z)  # Outputs 11 in grey
+x - 2
+print(x)  # Outputs 3 in grey
+^D
 ```
 
-### Example Usage
-
-Example Usage
-
-1. Place your source files (`main.c`, `util.c`) in `src/`.
-2. Define annotations in `include/annotations.h`.
-3. Run:
-
+### Running ToyVM Tests
 ```bash
-make
-./my_program
+make test
 ```
+Outputs 10 passing tests covering tokenization, arithmetic, and VM execution.
 
-Optionally, clean:
+### Exploring ToyVM
+- Source: `toyvm.c`, `toyvm.h`
+- Tests: `tests.c`
+- Details: See `samples/toyvm/README.md` for a full breakdown.
 
+ToyVM showcases how `lucy-test` simplifies testing a small interpreter, making it a great starting point for learning to use Lucy in your projects.
+
+## Known Issues
+- **macOS Library Loading**: `liblucy-test.so` may not load with `-rpath` on macOS. Workaround:
 ```bash
-make clean
+export DYLD_LIBRARY_PATH=.:$DYLD_LIBRARY_PATH
 ```
 
-This Makefile assumes lucy processes main.c and util.c, generating preprocessed files and annotation tracking, then links them into my_program.
+## Contributing
+Contributions are welcome! Feel free to submit pull requests or open issues for bugs, features, or improvements.
 
-## Example Build Command
-
-```bash
-gcc -Wall -Wextra -O2 -DTARGET_TEST=1 -I./include -c build/simple_processed.c -o build/simple_processed.o
-gcc -Wall -Wextra -O2 -DTARGET_TEST=1 -I./include -c build/annotations.c -o build/annotations.o
-gcc build/simple_processed.o build/annotations.o -o my_program
-```
-
-## Notes
-- lucy.h: Provides default struct and externs, included by `annotations.h`.
-- lucy_api.h: API for liblucy.so.
-- test_utils.h: Defines assertion macros; extend as needed.
-- Portability: Assumes a Unix-like environment with ANSI color support for the runner.
-
-For issues or enhancements, modify `src/lucy.c` and rebuild.
+## Future Improvements
+- Expand annotation syntax for more complex use cases.
+- Enhance `lucy-test` with test fixtures or setup/teardown hooks.
+- Improve error reporting in the preprocessor and test runner.
