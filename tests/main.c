@@ -13,7 +13,7 @@
  */
 
  #include "../include/annotations.h"  // Generated annotation tracking
- #include "../include/test_utils.h"   // Assertion macros
+ #include "../include/lucy_test.h"   // Assertion macros
  #include <string.h>
  #include <stdio.h>
  

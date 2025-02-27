@@ -1,16 +1,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "../include/lucy_api.h"
-#include "../include/test_utils.h"
+#include "../include/lucy_api.h"    // For lucy_init, lucy_cleanup, etc.
+#include "../include/lucy_test.h"   // For assertions and test annotations
+#include "annotations.h"            // Generated header with embedded lucy.h
 
 extern int __ANNOTATION_COUNT;
 extern struct Annotation __ANNOTATIONS[];
 extern void sync_annotations(void);
 
 int __test_failed = 0;
-
-/* ... includes ... */
 
 int main(int argc, char *argv[]) {
     int debug = 0;

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../include/lucy_api.h"
+#include "../include/lucy.h"    // For struct Annotation and internal functions
 #include "../include/parsing.h"
 
 /* Static global state for annotation tracking */
@@ -207,7 +208,7 @@ int lucy_generate_annotations_header(const char *base_annotations_path, const ch
 
     fprintf(header_out, "#ifndef ANNOTATIONS_H\n");
     fprintf(header_out, "#define ANNOTATIONS_H\n\n");
-    fprintf(header_out, "#include \"lucy.h\"\n\n");
+    fprintf(header_out, "#include \"lucy.h\"\n\n");  // Back to including lucy.h
     fprintf(header_out, "// User-defined Annotation Extensions\n");
 
     FILE *base_in = fopen(base_annotations_path, "r");

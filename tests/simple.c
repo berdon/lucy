@@ -35,3 +35,38 @@ void test_setup_teardown_counts() {
     assertEquals(setup_count - 1, teardown_count, "Setup and teardown counts should match");
     assertTrue(setup_count > 0, "Setup should have run at least once");
 }
+
+// @Test("Test string equality with both null")
+void test_string_equality_both_null() {
+    const char *expected = NULL;
+    const char *actual = NULL;
+    assertStringEquals(expected, actual, "Both null should be equal");
+}
+
+// @Test("Test string equality with expected null fails")
+void test_string_equality_expected_null() {
+    const char *expected = NULL;
+    const char *actual = "hello";
+    assertStringNotEquals(expected, actual, "Null and non-null should not be equal");
+}
+
+// @Test("Test string equality with actual null fails")
+void test_string_equality_actual_null() {
+    const char *expected = "hello";
+    const char *actual = NULL;
+    assertStringNotEquals(expected, actual, "Non-null and null should not be equal");
+}
+
+// @Test("Test string equality with non-null strings")
+void test_string_equality_non_null() {
+    const char *expected = "hello";
+    const char *actual = "hello";
+    assertStringEquals(expected, actual, "Same strings should pass");
+}
+
+// @Test("Test string inequality with both null fails")
+void test_string_inequality_both_null() {
+    const char *expected = NULL;
+    const char *actual = NULL;
+    assertStringEquals(expected, actual, "Both null should be equal (not unequal)");
+}
