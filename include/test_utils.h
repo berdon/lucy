@@ -5,13 +5,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Global flag to track test failure within a single test function
+extern int __test_failed;
+
 #define assertTrue(actual, message) \
     do { \
         int _actual = (actual); \
         if (!_actual) { \
             printf("FAIL: %s:%d - %s (expected true, got false)\n", \
                    __FILE__, __LINE__, (message) ? (message) : "Assertion failed"); \
-            exit(1); \
+            __test_failed = 1; \
         } \
     } while (0)
 
@@ -21,7 +24,7 @@
         if (_actual) { \
             printf("FAIL: %s:%d - %s (expected false, got true)\n", \
                    __FILE__, __LINE__, (message) ? (message) : "Assertion failed"); \
-            exit(1); \
+            __test_failed = 1; \
         } \
     } while (0)
 
@@ -33,7 +36,7 @@
             printf("FAIL: %s:%d - %s (expected %ld, got %ld)\n", \
                    __FILE__, __LINE__, (message) ? (message) : "Values not equal", \
                    (long)_exp, (long)_act); \
-            exit(1); \
+            __test_failed = 1; \
         } \
     } while (0)
 
@@ -45,7 +48,7 @@
             printf("FAIL: %s:%d - %s (expected different values, both %ld)\n", \
                    __FILE__, __LINE__, (message) ? (message) : "Values equal", \
                    (long)_exp); \
-            exit(1); \
+            __test_failed = 1; \
         } \
     } while (0)
 
@@ -55,7 +58,7 @@
             printf("FAIL: %s:%d - %s (expected '%s', got '%s')\n", \
                    __FILE__, __LINE__, (message) ? (message) : "Strings not equal", \
                    (const char *)(expected), (const char *)(actual)); \
-            exit(1); \
+            __test_failed = 1; \
         } \
     } while (0)
 
@@ -65,7 +68,7 @@
             printf("FAIL: %s:%d - %s (expected different strings, both '%s')\n", \
                    __FILE__, __LINE__, (message) ? (message) : "Strings equal", \
                    (const char *)(expected)); \
-            exit(1); \
+            __test_failed = 1; \
         } \
     } while (0)
 

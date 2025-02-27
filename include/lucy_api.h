@@ -12,40 +12,22 @@
 /* Maximum number of annotations that can be tracked */
 #define MAX_ANNOTATIONS 1000
 
-/* Process a single input file and write to an output file.
- * input_path: Path to the input .c file.
- * output_path: Path to the output processed .c file.
- * Returns: 0 on success, non-zero on error.
- */
+/* Process a single input file and write to an output file */
 int lucy_process_file(const char *input_path, const char *output_path);
 
-/* Generate the annotations header from a base file and collected annotations.
- * base_annotations_path: Path to the base annotations.h with user definitions.
- * output_path: Path to write the generated annotations.h.
- * Returns: 0 on success, non-zero on error.
- */
+/* Generate the annotations header from a base file and collected annotations */
 int lucy_generate_annotations_header(const char *base_annotations_path, const char *output_path);
 
-/* Generate the annotations source file with tracking data.
- * output_path: Path to write the generated annotations.c.
- * Returns: 0 on success, non-zero on error.
- */
+/* Generate the annotations source file with tracking data */
 int lucy_generate_annotations_source(const char *output_path);
 
-/* Initialize the internal annotation state (call before processing files).
- * Must be called before lucy_process_file to reset state.
- */
+/* Initialize the internal annotation state */
 void lucy_init(void);
 
-/* Free internal annotation memory (call after processing).
- * Cleans up memory allocated during processing.
- */
+/* Free internal annotation memory */
 void lucy_cleanup(void);
 
-/* Find annotated blocks by name (e.g., "Test") in the global __ANNOTATIONS array.
- * name: The annotation name to search for.
- * Returns: Pointer to an array of matching Annotation structs.
- */
+/* Find annotated blocks by name (e.g., "Test") in the global __ANNOTATIONS array */
 struct Annotation *find_annotated_blocks(const char *name);
 
 #endif // LUCY_API_H

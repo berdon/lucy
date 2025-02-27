@@ -9,6 +9,22 @@
 static struct Annotation annotations[MAX_ANNOTATIONS];
 int annotation_count = 0;
 
+struct Annotation *get_annotations(void) {
+    return annotations;
+}
+
+int get_annotation_count(void) {
+    return annotation_count;
+}
+
+void sync_annotations(void) {
+    /* Copy static annotations to __ANNOTATIONS */
+    for (int i = 0; i < annotation_count && i < MAX_ANNOTATIONS; i++) {
+        __ANNOTATIONS[i] = annotations[i];
+    }
+    __ANNOTATION_COUNT = annotation_count;
+}
+
 /* Non-static global state for extensions (exposed via lucy.h for testing) */
 Extension extensions[MAX_ANNOTATIONS];
 int extension_count = 0;
@@ -102,28 +118,26 @@ int lucy_process_file(const char *input_path, const char *output_path) {
             char func_name[MAX_BUFFER_SIZE];
             extract_function_name(line, func_name);
 
-            int has_test = 0;
+            int has_when = 0;
             for (int i = 0; i < pending_count; i++) {
                 const char *base = get_extension_base(pending_annotations[i].name);
-                if ((strcmp(pending_annotations[i].name, "When") == 0 && pending_annotations[i].arg[0]) ||
+                if (strcmp(pending_annotations[i].name, "When") == 0 ||
                     (base && strcmp(base, "When") == 0)) {
-                    if (strcmp(pending_annotations[i].name, "Test") == 0 ||
-                        (base && strcmp(pending_annotations[i].arg, "TARGET_TEST") == 0)) {
-                        has_test = 1;
-                    }
+                    has_when = 1;
                 }
             }
 
-            /* Apply #ifdef TARGET_TEST if @Test is present */
-            if (has_test) {
+            /* Debugging 1: Log when we apply #ifdef */
+            if (has_when) {
                 fprintf(out, "#ifdef TARGET_TEST\n");
                 in_when_block = 1;
+                brace_count = 1;
             }
 
-            /* Track all annotations */
+            /* Debugging 2: Log annotation tracking */
             for (int i = 0; i < pending_count && annotation_count < MAX_ANNOTATIONS; i++) {
                 annotations[annotation_count].name = strdup(pending_annotations[i].name);
-                annotations[annotation_count].target = NULL;  // Set in annotations.c
+                annotations[annotation_count].target = NULL;
                 annotations[annotation_count].target_name = strdup(func_name);
                 annotations[annotation_count].type = strdup("function");
                 split_args(pending_annotations[i].arg, annotations[annotation_count].args,
@@ -135,36 +149,51 @@ int lucy_process_file(const char *input_path, const char *output_path) {
                 } else if (base && strcmp(base, "When") == 0) {
                     if (strcmp(pending_annotations[i].name, "Disable") == 0) {
                         annotations[annotation_count].condition = strdup("__LUCY_TEST_DISABLE__");
+                        annotations[annotation_count].isRemoved = 1;
                     } else {
                         annotations[annotation_count].condition = strdup("TARGET_TEST");
+                        annotations[annotation_count].isRemoved = 0;
                     }
                 } else {
                     annotations[annotation_count].condition = NULL;
+                    annotations[annotation_count].isRemoved = 0;
                 }
-                annotations[annotation_count].isRemoved = (annotations[annotation_count].condition && strcmp(annotations[annotation_count].condition, "__LUCY_TEST_DISABLE__") == 0);
                 annotation_count++;
             }
 
             fprintf(out, "%s\n", line);
-            brace_count = 1;
             pending_count = 0;
         } else {
             fprintf(out, "%s\n", line);
             if (in_when_block) {
+                int in_string = 0;
+                char prev_char = '\0';
                 for (const char *c = line; *c; c++) {
-                    if (*c == '{') brace_count++;
-                    else if (*c == '}') brace_count--;
+                    if (*c == '"') {
+                        if (prev_char != '\\') in_string = !in_string;
+                    }
+                    if (!in_string) {
+                        if (*c == '{') brace_count++;
+                        else if (*c == '}') brace_count--;
+                    }
+                    prev_char = *c;
                 }
-                if (brace_count == 0 && is_function_end(line)) {
+                if (brace_count <= 0 && is_function_end(line)) {
                     fprintf(out, "#endif\n");
                     in_when_block = 0;
+                    brace_count = 0;
                 }
             }
         }
     }
 
+    if (in_when_block) {
+        fprintf(out, "#endif\n");
+    }
+
     fclose(in);
     fclose(out);
+    sync_annotations();
     return 0;
 }
 
@@ -284,13 +313,14 @@ void lucy_init(void) {
     extension_count = 0;
     memset(annotations, 0, sizeof(annotations));
     memset(extensions, 0, sizeof(extensions));
+    // No __ANNOTATIONS manipulation
 }
 
 /* Cleans up dynamically allocated memory */
 void lucy_cleanup(void) {
     for (int i = 0; i < annotation_count; i++) {
         free((void *)annotations[i].name);
-        free((void *)annotations[i].target);
+        // Don’t free target; it’s a function pointer from __ANNOTATIONS
         free((void *)annotations[i].type);
         free((void *)annotations[i].condition);
         free((void *)annotations[i].target_name);
@@ -298,15 +328,26 @@ void lucy_cleanup(void) {
             free((void *)annotations[i].args[j]);
         }
     }
+    annotation_count = 0;
+    extension_count = 0;
+    memset(annotations, 0, sizeof(annotations));
+    memset(extensions, 0, sizeof(extensions));
+    // No __ANNOTATIONS cleanup
 }
 
 /* Find annotated blocks by name (e.g., "Test") in the global __ANNOTATIONS array */
 struct Annotation *find_annotated_blocks(const char *name) {
-    static struct Annotation matches[MAX_ANNOTATIONS];
+    struct Annotation *matches = calloc(MAX_ANNOTATIONS, sizeof(struct Annotation));
+    if (!matches) {
+        fprintf(stderr, "Memory allocation failed in find_annotated_blocks\n");
+        return NULL;
+    }
     int count = 0;
     for (int i = 0; i < __ANNOTATION_COUNT; i++) {
         if (strcmp(__ANNOTATIONS[i].name, name) == 0) {
-            matches[count++] = __ANNOTATIONS[i];
+            matches[count] = __ANNOTATIONS[i];
+            count++;
+            if (count >= MAX_ANNOTATIONS) break;
         }
     }
     return matches;

@@ -1,4 +1,6 @@
-# Lucy: Annotation Processor and Testing Framework
+# Lucy
+
+A lightweight C annotation processor and testing framework built with Grok from xAI.
 
 ## Overview
 
@@ -50,101 +52,107 @@ It's vitally important to keep the amount of context the LLM needs to a minimum.
 
 ## Features
 
-- **Annotation Processing**: Parse custom annotations in C comments (e.g., `// @Annotation`) to generate code or metadata.
-- **Unit Testing**: Use `lucy-test` to write and run tests with simple `// @Test` annotations.
-- **Extensible**: Define custom annotation extensions for project-specific needs.
-- **Sample Project**: Includes `toyvm`, a minimal interpreter demonstrating `lucy-test` usage.
+- **Annotation Processing**: Supports custom annotations via `#annotation` definitions, with `@When` as the base annotation.
+- **Testing Framework**: Lightweight test runner with support for `@Test`, `@Disable`, `@Setup`, and `@Teardown` annotations.
+- **Extensible**: Easily extendable with new annotations and preprocessing logic.
 
-## Directory Structure
-```
-./
-├── src/
-│   └── lucy.c              # Lucy source code
-├── tests/
-│   ├── simple.c           # Simple unit tests
-│   ├── complex.c          # Complex unit tests
-│   └── main.c             # Test runner
-├── include/
-│   ├── lucy.h             # Default annotation struct and externs
-|   ├── lucy_api.h         # Shared library API
-│   ├── test_utils.h       # Assertion macros
-│   └── annotations.h      # User-defined annotation extensions
-├── build/                 # Generated files (lucy, processed .c, annotations.h/c)
-└── Makefile               # Build script
+## Building
+
+To build Lucy, ensure you have `gcc` or a compatible C compiler installed, then run:
+
+``` 
+make
 ```
 
-## Installation
+This generates:
+- `lucy`: The annotation processor.
+- `liblucy.so`: Shared library for annotation processing.
+- `liblucy-test.so`: Shared library for the test runner.
+- `test_runner`: The executable to run unit tests.
 
-### Prerequisites
-- GCC or a compatible C compiler (e.g., Clang).
-- Standard C library.
+## Usage
 
-### Building
-From the root `lucy/` directory:
+### Annotation Processing
+Run `lucy` to process source files and generate annotation headers/source:
 
-```bash
-make clean && make
+``` 
+./lucy include/annotations.h build/annotations.h build/annotations.c \
+    src/source.c:build/source_processed.c
 ```
 
-This builds:
-- `lucy`: The annotation processor binary.
-- `liblucy-test.so`: The shared library for unit testing.
+This processes `src/source.c` into `build/source_processed.c`, generating `build/annotations.h` and `build/annotations.c`.
 
-## Using lucy-test in Your Projects
+### Writing Tests
+Lucy’s testing framework uses annotations to define and run tests. Include `lucy_test.h` and link against `liblucy-test.so`.
 
-`lucy-test` provides a simple way to add unit tests to C projects using annotations. Here’s how to integrate it:
+#### Basic Test
+Define a test with `@Test`:
 
-### Setup
-1. **Include the Header**: Add `#include "lucy_test.h"` to your test file, assuming it’s in your include path.
-2. **Write Tests**: Use `// @Test` annotations above test functions. Optionally, use `// @Disable` to skip tests.
-
-```c
+``` 
 #include "lucy_test.h"
 
-// @Test("Example test")
-void test_example() {
-    assertEquals(1 + 1, 2, "1 + 1 should equal 2");
+// @Test("Check addition")
+void test_addition() {
+    assertEquals(4, 2 + 2, "2 + 2 should equal 4");
 }
+```
 
+#### Disabling Tests
+Use `@Disable` to skip a test:
+
+``` 
 // @Disable("Not implemented yet")
-// @Test("Disabled test")
-void test_disabled() {
-    assertTrue(0, "This should not run");
+// @Test("Pending feature")
+void test_pending() {
+    assertTrue(0, "This won’t run");
 }
 ```
 
-3. **Process with lucy**: Use the `lucy` tool to preprocess your test file and generate annotation metadata:
+#### Setup and Teardown
+Use `@Setup` and `@Teardown` to run code before and after each test. All functions annotated with `@Setup` run before each test, and all `@Teardown` functions run after:
 
-```bash
-lucy include/annotations.h build/annotations.h build/annotations.c tests.c:build/tests_processed.c
+``` 
+static int counter = 0;
+
+// @Setup
+void setup_counter() {
+    counter = 1;
+}
+
+// @Teardown
+void teardown_counter() {
+    counter = 0;
+}
+
+// @Test("Counter is set before test")
+void test_counter_setup() {
+    assertEquals(1, counter, "Counter should be set by setup");
+}
 ```
 
-4. **Compile and Link**:
-   - Compile your source and test files with `-DTARGET_TEST=1` to enable test mode.
-   - Link against `liblucy-test.so` to include the test runner.
+- **Multiple Setups/Teardowns**: If multiple `@Setup` or `@Teardown` functions exist, all are executed in the order they appear in `__ANNOTATIONS`.
+- **No Cleanup**: Lucy doesn’t automatically reset state between tests; manage it manually in `@Setup` or `@Teardown` if needed.
 
-```bash
-gcc -Wall -O2 -DTARGET_TEST=1 -Iinclude -c src/mylib.c -o build/mylib.o
-gcc -Wall -O2 -DTARGET_TEST=1 -Iinclude -c build/tests_processed.c -o build/tests_processed.o
-gcc -Wall -O2 -DTARGET_TEST=1 -Iinclude -c build/annotations.c -o build/annotations.o
-gcc build/tests_processed.o build/mylib.o build/annotations.o -L. -llucy-test -o test_runner
+### Running Tests
+Compile and link your test files with `liblucy-test.so`, then run:
+
+``` 
+gcc -I./include -L./ -llucy-test build/annotations.o tests/*.c -o test_runner
+./test_runner
 ```
 
-5. **Run Tests**:
-   ```bash
-   ./test_runner
-   ```
-   Output example:
-   ```
-   Running tests...
-   Running: Example test ✔
+Output:
+``` 
+Running tests...
+Running: Check addition ✔
+Running: Counter is set before test ✔
 
-   Disabled tests:
-   Disabled: Disabled test (Not implemented yet)
+Disabled tests:
+Disabled: Pending feature (Not implemented yet)
 
-   Test Summary: 1/1 passed (1 disabled)
-   ✔ All enabled tests passed!
-   ```
+Test Summary: 2/2 passed, 0 failed (1 disabled)
+✔ All enabled tests passed!
+```
 
 ### Makefile Integration
 Add rules to your Makefile to automate the process:
@@ -229,5 +237,4 @@ Contributions are welcome! Feel free to submit pull requests or open issues for 
 
 ## Future Improvements
 - Expand annotation syntax for more complex use cases.
-- Enhance `lucy-test` with test fixtures or setup/teardown hooks.
 - Improve error reporting in the preprocessor and test runner.

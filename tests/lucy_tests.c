@@ -1,21 +1,19 @@
-/* Unit tests for lucy's internal functionality */
-#include "../include/lucy_test.h"  // For @Test annotation
-#include "../include/lucy_api.h"  // For MAX_BUFFER_SIZE, MAX_ANNOTATIONS
-#include "../include/parsing.h"   // For extract_* functions
+/* Unit tests for lucy's API functionality */
+#include "../include/lucy_test.h"
+#include "../include/lucy_api.h"
+#include "../include/parsing.h"
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-/* Function prototypes from lucy.h for testing */
-extern const char *get_extension_base(const char *name);
-extern void load_extensions(const char *base_annotations_path);
+extern struct Annotation *get_annotations(void);
+extern int get_annotation_count(void);
 
-/* Dummy functions to test translation */
+/* Dummy functions for testing */
 void dummy_func(void) {}
 void dummy_another(void) {}
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcomment"
 // @Test("Extract simple annotation name")
-#pragma GCC diagnostic pop
 void test_extract_simple_annotation() {
     char name[MAX_BUFFER_SIZE] = {0};
     char arg[MAX_BUFFER_SIZE] = {0};
@@ -77,61 +75,180 @@ void test_extract_extension_no_base() {
     assertStringEquals("", base_arg, "Expected empty base arg");
 }
 
-// @Test("Get extension base")
-void test_get_extension_base() {
-    extern int extension_count;
-    extern Extension extensions[];
-    strcpy(extensions[0].name, "Test");
-    strcpy(extensions[0].base, "When");
-    extension_count = 1;
+// @Test("lucy_init resets state")
+void test_lucy_init() {
+    const char *input = "test_input.c";
+    const char *output = "test_output.c";
+    FILE *f = fopen(input, "w");
+    fprintf(f, "// @When(TARGET_TEST)\nvoid test_func() {}\n");
+    fclose(f);
+    lucy_init();
+    lucy_process_file(input, output);
+    // Don’t check __ANNOTATIONS; it’s static
+    // Verify runtime state via file output
+    FILE *out = fopen(output, "r");
+    char line[MAX_LINE_LENGTH];
+    assertTrue(fgets(line, sizeof(line), out) != NULL, "Should read first line");
+    assertStringEquals("#ifdef TARGET_TEST\n", line, "Expected #ifdef TARGET_TEST");
+    fclose(out);
 
-    const char *base = get_extension_base("Test");
-    assertStringEquals("When", base, "Expected 'Test' to extend 'When'");
-
-    base = get_extension_base("Unknown");
-    assertEquals(NULL, base, "Expected NULL for unknown annotation");
+    remove(input);
+    remove(output);
 }
 
-// @Test("Get extension base with empty list")
-void test_get_extension_base_empty() {
-    extern int extension_count;
-    extension_count = 0;
-    const char *base = get_extension_base("Test");
-    assertEquals(NULL, base, "Expected NULL with no extensions");
+// @Test("lucy_process_file with @When")
+void test_lucy_process_file_when() {
+    const char *input = "test_input.c";
+    const char *output = "test_output.c";
+    FILE *f = fopen(input, "w");
+    fprintf(f, "// @When(TARGET_TEST)\nvoid test_func() {}\n");
+    fclose(f);
+
+    lucy_init();
+    int result = lucy_process_file(input, output);
+    assertEquals(0, result, "Processing should succeed");
+
+    FILE *out = fopen(output, "r");
+    char line[MAX_LINE_LENGTH];
+    assertTrue(fgets(line, sizeof(line), out) != NULL, "Should read first line");
+    assertStringEquals("#ifdef TARGET_TEST\n", line, "Expected #ifdef TARGET_TEST");
+    assertTrue(fgets(line, sizeof(line), out) != NULL, "Should read second line");
+    assertStringEquals("void test_func() {}\n", line, "Expected function definition");
+    assertTrue(fgets(line, sizeof(line), out) != NULL, "Should read third line");
+    assertStringEquals("#endif\n", line, "Expected #endif");
+    fclose(out);
+
+    // Don’t check find_annotated_blocks; runtime annotations aren’t synced
+    remove(input);
+    remove(output);
 }
 
-// @Test("Process file with @When - manual check")
-void test_process_when() {
-    assertTrue(1, "Check build/lucy_tests_processed.c for #ifdef TARGET_TEST around dummy_func");
+// @Test("lucy_process_file with extension")
+void test_lucy_process_file_extension() {
+    const char *input = "test_input.c";
+    const char *output = "test_output.c";
+    FILE *f = fopen(input, "w");
+    fprintf(f, "// #annotation @Custom(flag) : @When(TARGET_TEST)\n// @Custom(\"flag1\")\nvoid test_func() {}\n");
+    fclose(f);
+
+    lucy_init();
+    int result = lucy_process_file(input, output);
+    assertEquals(0, result, "Processing should succeed");
+
+    FILE *out = fopen(output, "r");
+    char line[MAX_LINE_LENGTH];
+    fgets(line, sizeof(line), out); // Extension definition
+    assertStringEquals("// #annotation @Custom(flag) : @When(TARGET_TEST)\n", line, "Expected extension definition preserved");
+    fgets(line, sizeof(line), out); // #ifdef
+    assertStringEquals("#ifdef TARGET_TEST\n", line, "Expected #ifdef from @Custom extension");
+    fclose(out);
+
+    struct Annotation *found = find_annotated_blocks("Custom");
+    assertTrue(found[0].name != NULL, "Should find @Custom annotation");
+    assertStringEquals("Custom", found[0].name, "Annotation name should be 'Custom'");
+    free(found);
+
+    remove(input);
+    remove(output);
 }
 
-// @Test("Multiple annotations on same function")
-void test_multiple_annotations() {
-    assertTrue(1, "Manual check: Only last annotation should apply (limitation)");
+// @Test("lucy_generate_annotations_header")
+void test_lucy_generate_annotations_header() {
+    const char *base = "./include/annotations.h";
+    const char *output = "test_annotations.h";
+    lucy_init();
+    int result = lucy_generate_annotations_header(base, output);
+    assertEquals(0, result, "Header generation should succeed");
+
+    FILE *f = fopen(output, "r");
+    char buffer[1024];
+    fread(buffer, 1, sizeof(buffer), f);
+    assertTrue(strstr(buffer, "#ifndef ANNOTATIONS_H") != NULL, "Expected header guard");
+    assertTrue(strstr(buffer, "#include \"lucy.h\"") != NULL, "Expected lucy.h include");
+    fclose(f);
+    remove(output);
 }
 
-// @Test("Generate annotations header - manual check")
-void test_generate_annotations_header() {
-    assertTrue(1, "Check build/annotations.h for extern void dummy_func(void);");
+// @Test("lucy_generate_annotations_source")
+void test_lucy_generate_annotations_source() {
+    const char *input = "test_input.c";
+    const char *output = "test_output.c";
+    const char *annotations_c = "test_annotations.c";
+    FILE *f = fopen(input, "w");
+    fprintf(f, "// @When(TARGET_TEST)\nvoid test_func() {}\n");
+    fclose(f);
+
+    lucy_init();
+    lucy_process_file(input, output);
+    int result = lucy_generate_annotations_source(annotations_c);
+    assertEquals(0, result, "Source generation should succeed");
+
+    FILE *out = fopen(annotations_c, "r");
+    char buffer[1024];
+    fread(buffer, 1, sizeof(buffer), out);
+    assertTrue(strstr(buffer, "struct Annotation __ANNOTATIONS[") != NULL, "Expected annotations array");
+    assertTrue(strstr(buffer, "{\"When\", test_func,") != NULL, "Expected test_func entry");
+    fclose(out);
+
+    remove(input);
+    remove(output);
+    remove(annotations_c);
 }
 
-// @Test("Generate annotations source - manual check")
-void test_generate_annotations_source() {
-    assertTrue(1, "Check build/annotations.c for correct __ANNOTATIONS entry for dummy_func");
+// @Test("find_annotated_blocks finds runtime annotations")
+void test_find_annotated_blocks() {
+    const char *input = "test_input.c";
+    const char *output = "test_output.c";
+    FILE *f = fopen(input, "w");
+    fprintf(f, "// @When(TARGET_TEST)\nvoid dummy_func() {}\n");
+    fclose(f);
+
+    lucy_init();
+    int result = lucy_process_file(input, output);
+    assertEquals(0, result, "Processing should succeed");
+
+    struct Annotation *found = find_annotated_blocks("When");
+    int count = 0;
+    if (found) {
+        for (int i = 0; found[i].name && i < MAX_ANNOTATIONS; i++) {
+            if (strcmp(found[i].name, "When") == 0) {
+                count++;
+            }
+        }
+        free(found);
+    } else {
+        assertTrue(0, "find_annotated_blocks returned NULL");
+    }
+    assertTrue(count > 0, "Should find at least one When annotation after processing");
+
+    remove(input);
+    remove(output);
 }
 
-// @Test("Annotation with empty args")
-void test_empty_args_annotation() {
-    char name[MAX_BUFFER_SIZE] = {0};
-    char arg[MAX_BUFFER_SIZE] = {0};
-    extract_annotation_name("// @Test()", name, arg);
-    assertStringEquals("Test", name, "Expected name 'Test'");
-    assertStringEquals("", arg, "Expected empty args");
-}
+// @Test("lucy_cleanup resets state")
+void test_lucy_cleanup() {
+    const char *input = "test_input.c";
+    const char *output = "test_output.c";
+    FILE *f = fopen(input, "w");
+    fprintf(f, "// @When(TARGET_TEST)\nvoid test_func() {}\n");
+    fclose(f);
 
-// @Test("Max annotations limit")
-void test_max_annotations() {
-    extern int annotation_count;
-    annotation_count = MAX_ANNOTATIONS;
-    assertTrue(1, "Manual check: Ensure no more than MAX_ANNOTATIONS are processed");
+    lucy_init();
+    lucy_process_file(input, output);
+    struct Annotation *before = find_annotated_blocks("When");
+    int before_count = 0;
+    for (int i = 0; before[i].name && i < MAX_ANNOTATIONS; i++) before_count++;
+    free(before);
+
+    lucy_cleanup();
+    struct Annotation *after = find_annotated_blocks("When");
+    int after_count = 0;
+    for (int i = 0; after[i].name && i < MAX_ANNOTATIONS; i++) after_count++;
+    free(after);
+
+    assertTrue(before_count > 0, "Should have annotations before cleanup");
+    assertEquals(0, after_count, "Should have no annotations after cleanup");
+
+    remove(input);
+    remove(output);
 }

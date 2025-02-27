@@ -1,6 +1,6 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -O2 -DTARGET_TEST=1 -I./include
+CFLAGS =  -Wall -Wextra -O2 -DTARGET_TEST=1 -I./include -g
 LDFLAGS = -shared
 
 # Directories
@@ -27,9 +27,9 @@ PARSING_OBJ = $(BUILD_DIR)/parsing.o
 LUCY_TEST_MAIN_OBJ = $(BUILD_DIR)/lucy_test_main.o
 LIB_OBJ = $(BUILD_DIR)/lucy_shared.o
 
-TEST_SRCS = $(TEST_DIR)/simple.c $(TEST_DIR)/complex.c $(TEST_DIR)/lucy_tests.c
-TEST_OBJS = $(BUILD_DIR)/simple_processed.o $(BUILD_DIR)/complex_processed.o $(BUILD_DIR)/lucy_tests_processed.o $(BUILD_DIR)/annotations.o
-TEST_PREPROCESSED = $(BUILD_DIR)/simple_processed.c $(BUILD_DIR)/complex_processed.c $(BUILD_DIR)/lucy_tests_processed.c
+TEST_SRCS = $(TEST_DIR)/simple.c $(TEST_DIR)/complex.c $(TEST_DIR)/lucy_tests.c $(TEST_DIR)/lucy-test_tests.c
+TEST_OBJS = $(BUILD_DIR)/simple_processed.o $(BUILD_DIR)/complex_processed.o $(BUILD_DIR)/lucy_tests_processed.o $(BUILD_DIR)/lucy-test_tests_processed.o $(BUILD_DIR)/annotations.o
+TEST_PREPROCESSED = $(BUILD_DIR)/simple_processed.c $(BUILD_DIR)/complex_processed.c $(BUILD_DIR)/lucy_tests_processed.c $(BUILD_DIR)/lucy-test_tests_processed.c
 
 # Default target
 all: $(LUCY_TARGET) $(LIB_TARGET) $(LUCY_TEST_TARGET) test
@@ -71,7 +71,8 @@ $(BUILD_DIR)/annotations.h $(BUILD_DIR)/annotations.c $(TEST_PREPROCESSED): $(TE
 	$(LUCY_TARGET) $(INCLUDE_DIR)/annotations.h $(BUILD_DIR)/annotations.h $(BUILD_DIR)/annotations.c \
 		$(TEST_DIR)/simple.c:$(BUILD_DIR)/simple_processed.c \
 		$(TEST_DIR)/complex.c:$(BUILD_DIR)/complex_processed.c \
-		$(TEST_DIR)/lucy_tests.c:$(BUILD_DIR)/lucy_tests_processed.c
+		$(TEST_DIR)/lucy_tests.c:$(BUILD_DIR)/lucy_tests_processed.c \
+		$(TEST_DIR)/lucy-test_tests.c:$(BUILD_DIR)/lucy-test_tests_processed.c
 
 # Compile test objects
 $(BUILD_DIR)/%_processed.o: $(BUILD_DIR)/%_processed.c $(BUILD_DIR)/annotations.h | $(BUILD_DIR)
